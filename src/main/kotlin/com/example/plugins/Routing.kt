@@ -1,16 +1,22 @@
 package com.example.plugins
 
 import com.example.data.Room
-import com.example.data.models.BasicApiResponse
-import com.example.data.models.CreateRoomRequest
-import com.example.data.models.RoomResponse
+import com.example.data.models.*
+import com.example.gson
 import com.example.other.Constants.MAX_ROOM_SIZE
+import com.example.other.Constants.TYPE_CHAT_MESSAGE
 import com.example.server
+import com.google.gson.Gson
+import com.google.gson.JsonParser
 import io.ktor.routing.*
 import io.ktor.http.*
 import io.ktor.application.*
+import io.ktor.http.cio.websocket.*
 import io.ktor.response.*
 import io.ktor.request.*
+import io.ktor.sessions.*
+import io.ktor.websocket.*
+import kotlinx.coroutines.channels.consumeEach
 
 fun Application.configureRouting() {
 
@@ -90,7 +96,7 @@ fun Route.createSearchRoomRoute() {
                 it.name
             }
 
-            call.respond(HttpStatusCode.OK  , roomResponse)
+            call.respond(HttpStatusCode.OK, roomResponse)
         }
     }
 }
@@ -100,7 +106,7 @@ fun Route.joinRoomRoute() {
         get {
             val username = call.parameters["username"]
             val roomName = call.parameters["roomName"]
-            if(username == null || roomName == null) {
+            if (username == null || roomName == null) {
                 call.respond(HttpStatusCode.BadRequest)
                 return@get
             }
@@ -131,4 +137,46 @@ fun Route.joinRoomRoute() {
             }
         }
     }
+}
+
+
+fun Route.standardWebSocket(
+    handleFrame: suspend (
+        socket: DefaultWebSocketServerSession,
+        clientId: String,
+        message: String,
+        payload: BaseModel
+    ) -> Unit
+) {
+    webSocket {
+        val session = call.sessions.get<DrawingSession>()
+
+        if (session == null) {
+            close(CloseReason(CloseReason.Codes.VIOLATED_POLICY, "No session"))
+            return@webSocket
+        }
+
+        try {
+            incoming.consumeEach { frame ->
+                if (frame is Frame.Text) {
+                    val message = frame.readText()
+                    val jsonObject = JsonParser.parseString(message).asJsonObject
+                    val type = when(jsonObject.get("type").asString) {
+                        TYPE_CHAT_MESSAGE -> ChatMessage::class.java
+                        else -> BaseModel::class.java
+                    }
+
+                    val payload = gson.fromJson(message, type)
+                    handleFrame(this, session.clientId, message, payload)
+                }
+            }
+        }catch (e: Exception) {
+           e.printStackTrace()
+        }
+        finally {
+            // Handle the disconnects
+        }
+
+    }
+
 }
