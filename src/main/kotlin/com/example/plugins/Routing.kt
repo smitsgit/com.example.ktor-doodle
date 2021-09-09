@@ -3,6 +3,7 @@ package com.example.plugins
 import com.example.data.Room
 import com.example.data.models.BasicApiResponse
 import com.example.data.models.CreateRoomRequest
+import com.example.data.models.RoomResponse
 import com.example.other.Constants.MAX_ROOM_SIZE
 import com.example.server
 import io.ktor.routing.*
@@ -15,6 +16,7 @@ fun Application.configureRouting() {
 
     install(Routing) {
         createRoomRoute()
+        createSearchRoomRoute()
     }
     routing {
         get("/") {
@@ -23,6 +25,7 @@ fun Application.configureRouting() {
     }
 
 }
+
 
 fun Route.createRoomRoute() {
     route("/api/createRoom") {
@@ -62,6 +65,31 @@ fun Route.createRoomRoute() {
             println("Room Created: ${room.name}")
 
             call.respond(HttpStatusCode.OK, BasicApiResponse(true))
+        }
+    }
+}
+
+fun Route.createSearchRoomRoute() {
+    route("/api/getRooms") {
+        get {
+            val query = call.parameters["searchQuery"]
+
+            if (query == null) {
+                call.respond(HttpStatusCode.BadRequest)
+                return@get
+            }
+
+            val rooms = server.rooms.filterKeys {
+                it.contains(query, ignoreCase = true)
+            }
+
+            val roomResponse = rooms.values.map {
+                RoomResponse(it.name, it.maxPlayers, it.players.size)
+            }.sortedBy {
+                it.name
+            }
+
+            call.respond(HttpStatusCode.OK  , roomResponse)
         }
     }
 }
