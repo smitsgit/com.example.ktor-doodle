@@ -5,6 +5,7 @@ import com.example.data.models.*
 import com.example.gson
 import com.example.other.Constants.MAX_ROOM_SIZE
 import com.example.other.Constants.TYPE_CHAT_MESSAGE
+import com.example.other.Constants.TYPE_DRAW_DATA
 import com.example.server
 import com.google.gson.Gson
 import com.google.gson.JsonParser
@@ -139,6 +140,25 @@ fun Route.joinRoomRoute() {
     }
 }
 
+fun Route.getWebSocketRoute() {
+    route("/ws/draw") {
+        standardWebSocket { socket, clientId, message, payload ->
+            when (payload) {
+               is DrawData -> {
+                   val room = server.rooms[payload.roomName] ?: return@standardWebSocket
+                   if (room.currentPhase == Room.Phase.GAME_RUNNING) {
+                       room.broadcastExceptTo(clientId, message)
+                   }
+               }
+               is ChatMessage -> {
+
+               }
+            }
+        }
+
+    }
+}
+
 
 fun Route.standardWebSocket(
     handleFrame: suspend (
@@ -163,6 +183,7 @@ fun Route.standardWebSocket(
                     val jsonObject = JsonParser.parseString(message).asJsonObject
                     val type = when(jsonObject.get("type").asString) {
                         TYPE_CHAT_MESSAGE -> ChatMessage::class.java
+                        TYPE_DRAW_DATA -> DrawData::class.java
                         else -> BaseModel::class.java
                     }
 
