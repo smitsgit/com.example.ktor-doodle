@@ -9,6 +9,7 @@ import com.example.other.Constants.TYPE_ANNOUNCEMENT_DATA
 import com.example.other.Constants.TYPE_CHAT_MESSAGE
 import com.example.other.Constants.TYPE_DRAW_DATA
 import com.example.other.Constants.TYPE_JOIN_ROOM_HANDSHAKE
+import com.example.other.Constants.TYPE_PHASE_CHANGE
 import com.example.server
 import com.google.gson.Gson
 import com.google.gson.JsonParser
@@ -160,7 +161,7 @@ fun Route.getWebSocketRoute() {
                    if (!room.containsPlayer(player.username)) {
                        room.addPlayer(player.clientId, player.username, socket)
                    }
-
+1
                }
                is DrawData -> {
                    val room = server.rooms[payload.roomName] ?: return@standardWebSocket
@@ -204,6 +205,7 @@ fun Route.standardWebSocket(
                         TYPE_DRAW_DATA -> DrawData::class.java
                         TYPE_ANNOUNCEMENT_DATA -> Announcement::class.java
                         TYPE_JOIN_ROOM_HANDSHAKE -> JoinRoomHandshake::class.java
+                        TYPE_PHASE_CHANGE -> PhaseChange::class.java
                         else -> BaseModel::class.java
                     }
 

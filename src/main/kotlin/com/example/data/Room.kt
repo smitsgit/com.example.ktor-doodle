@@ -1,18 +1,22 @@
 package com.example.data
 
+import com.example.data.Room.Phase.*
 import com.example.data.models.Announcement
+import com.example.data.models.PhaseChange
 import com.example.gson
 import io.ktor.http.cio.websocket.*
-import kotlinx.coroutines.isActive
+import kotlinx.coroutines.*
 
 class Room(
     val name: String,
     val maxPlayers: Int,
     var players: List<Player> = listOf()
 ) {
+    private var timerJob: Job? = null
+    private var drawingPlayer: Player? = null
 
     private var phaseChangedListener: ((Phase) -> Unit)? = null
-    var currentPhase = Phase.WAITING_FOR_PLAYERS
+    var currentPhase = WAITING_FOR_PLAYERS
         set(value) {
             synchronized(field) {
                 field = value
@@ -27,12 +31,40 @@ class Room(
     init {
         setPhaseChangeListener { phase ->
             when (phase) {
-                Phase.WAITING_FOR_PLAYERS -> waitingForPlayers()
-                Phase.WAITING_FOR_START -> waitingForStart()
-                Phase.NEW_ROUND -> newRound()
-                Phase.GAME_RUNNING -> gameRunning()
-                Phase.SHOW_WORD -> showWord()
+                WAITING_FOR_PLAYERS -> waitingForPlayers()
+                WAITING_FOR_START -> waitingForStart()
+                NEW_ROUND -> newRound()
+                GAME_RUNNING -> gameRunning()
+                SHOW_WORD -> showWord()
             }
+        }
+    }
+
+    private fun waitAndNotify(ms: Long) {
+        timerJob?.cancel()
+        timerJob = GlobalScope.launch {
+            val phaseChange = PhaseChange(
+                currentPhase,
+                ms,
+                drawingPlayer?.username
+            )
+            repeat((ms / UPDATE_TIME_FREQ).toInt()) {
+                if (it != 0) {
+                    phaseChange.newPhase = null
+                }
+                broadcast(gson.toJson(phaseChange))
+                phaseChange.time -= UPDATE_TIME_FREQ
+                delay(UPDATE_TIME_FREQ)
+            }
+
+            currentPhase = when(currentPhase) {
+                WAITING_FOR_START -> NEW_ROUND
+                NEW_ROUND -> GAME_RUNNING
+                GAME_RUNNING -> SHOW_WORD
+                SHOW_WORD -> NEW_ROUND
+                else -> WAITING_FOR_PLAYERS
+            }
+
         }
     }
 
@@ -59,12 +91,12 @@ class Room(
         players = players + player
 
         if (players.size == 1) {
-            currentPhase = Phase.WAITING_FOR_PLAYERS
-        } else if (players.size == 2 && currentPhase == Phase.WAITING_FOR_PLAYERS) {
-            currentPhase = Phase.WAITING_FOR_START
+            currentPhase = WAITING_FOR_PLAYERS
+        } else if (players.size == 2 && currentPhase == WAITING_FOR_PLAYERS) {
+            currentPhase = WAITING_FOR_START
             players = players.shuffled()
-        } else if (currentPhase == Phase.WAITING_FOR_START && maxPlayers == players.size) {
-            currentPhase = Phase.NEW_ROUND
+        } else if (currentPhase == WAITING_FOR_START && maxPlayers == players.size) {
+            currentPhase = NEW_ROUND
             players = players.shuffled()
         }
 
@@ -86,11 +118,24 @@ class Room(
 
 
     private fun waitingForPlayers() {
-
+         GlobalScope.launch {
+             val phaseChange = PhaseChange(
+                 WAITING_FOR_PLAYERS,
+                 DELAY_WAITING_FOR_PLAYERS
+             )
+             broadcast(gson.toJson(phaseChange))
+         }
     }
 
     private fun waitingForStart() {
-
+        GlobalScope.launch {
+            waitAndNotify(DELAY_WAITING_FOR_START_TO_NEW_ROUND)
+            val phaseChange = PhaseChange(
+                WAITING_FOR_START,
+                DELAY_WAITING_FOR_PLAYERS
+            )
+            broadcast(gson.toJson(phaseChange))
+        }
     }
 
     private fun newRound() {
@@ -111,5 +156,14 @@ class Room(
         NEW_ROUND,
         GAME_RUNNING,
         SHOW_WORD
+    }
+
+    companion object {
+        const val UPDATE_TIME_FREQ = 1000L
+        const val DELAY_WAITING_FOR_START_TO_NEW_ROUND = 10000L
+        const val DELAY_NEW_ROUND_TO_GAME_RUNNING = 20000L
+        const val DELAY_GAME_RUNNING_TO_SHOW_WORD = 60000L
+        const val DELAY_SHOW_WORD_TO_NEW_ROUND = 10000L
+        const val DELAY_WAITING_FOR_PLAYERS = 10000L
     }
 }
