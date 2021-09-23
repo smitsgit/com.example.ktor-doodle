@@ -1,5 +1,7 @@
 package com.example.data
 
+import com.example.data.models.Announcement
+import com.example.gson
 import io.ktor.http.cio.websocket.*
 import kotlinx.coroutines.isActive
 
@@ -9,7 +11,7 @@ class Room(
     var players: List<Player> = listOf()
 ) {
 
-    private var phaseChangedListener:((Phase) -> Unit)? = null
+    private var phaseChangedListener: ((Phase) -> Unit)? = null
     var currentPhase = Phase.WAITING_FOR_PLAYERS
         set(value) {
             synchronized(field) {
@@ -23,15 +25,15 @@ class Room(
     }
 
     init {
-         setPhaseChangeListener { phase ->
-             when(phase) {
-                 Phase.WAITING_FOR_PLAYERS -> waitingForPlayers()
-                 Phase.WAITING_FOR_START -> waitingForStart()
-                 Phase.NEW_ROUND -> newRound()
-                 Phase.GAME_RUNNING -> gameRunning()
-                 Phase.SHOW_WORD -> showWord()
-             }
-         }
+        setPhaseChangeListener { phase ->
+            when (phase) {
+                Phase.WAITING_FOR_PLAYERS -> waitingForPlayers()
+                Phase.WAITING_FOR_START -> waitingForStart()
+                Phase.NEW_ROUND -> newRound()
+                Phase.GAME_RUNNING -> gameRunning()
+                Phase.SHOW_WORD -> showWord()
+            }
+        }
     }
 
     suspend fun broadcast(message: String) {
@@ -50,6 +52,30 @@ class Room(
                 it.socket.send(Frame.Text(message))
             }
         }
+    }
+
+    suspend fun addPlayer(clientId: String, username: String, socketSession: WebSocketSession): Player {
+        val player = Player(username, socketSession, clientId)
+        players = players + player
+
+        if (players.size == 1) {
+            currentPhase = Phase.WAITING_FOR_PLAYERS
+        } else if (players.size == 2 && currentPhase == Phase.WAITING_FOR_PLAYERS) {
+            currentPhase = Phase.WAITING_FOR_START
+            players = players.shuffled()
+        } else if (currentPhase == Phase.WAITING_FOR_START && maxPlayers == players.size) {
+            currentPhase = Phase.NEW_ROUND
+            players = players.shuffled()
+        }
+
+        val announcement = Announcement(
+            message = "$username has joined the party",
+            System.currentTimeMillis(),
+            Announcement.TYPE_PLAYER_ENTERED_ROOM
+        )
+        broadcast(gson.toJson(announcement))
+
+        return player
     }
 
     fun containsPlayer(username: String): Boolean {

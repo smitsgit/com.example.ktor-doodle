@@ -1,11 +1,14 @@
 package com.example.plugins
 
+import com.example.data.Player
 import com.example.data.Room
 import com.example.data.models.*
 import com.example.gson
 import com.example.other.Constants.MAX_ROOM_SIZE
+import com.example.other.Constants.TYPE_ANNOUNCEMENT_DATA
 import com.example.other.Constants.TYPE_CHAT_MESSAGE
 import com.example.other.Constants.TYPE_DRAW_DATA
+import com.example.other.Constants.TYPE_JOIN_ROOM_HANDSHAKE
 import com.example.server
 import com.google.gson.Gson
 import com.google.gson.JsonParser
@@ -144,6 +147,21 @@ fun Route.getWebSocketRoute() {
     route("/ws/draw") {
         standardWebSocket { socket, clientId, message, payload ->
             when (payload) {
+               is JoinRoomHandshake -> {
+                   val room = server.rooms[payload.roomName]
+                   if (room == null) {
+                       val gameError = GameError(GameError.ERROR_ROOM_NOT_FOUND)
+                       socket.send(Frame.Text(gson.toJson(gameError)))
+                       return@standardWebSocket
+                   }
+                   val player = Player(payload.username, socket, payload.clientId)
+                   server.playerJoined(player)
+
+                   if (!room.containsPlayer(player.username)) {
+                       room.addPlayer(player.clientId, player.username, socket)
+                   }
+
+               }
                is DrawData -> {
                    val room = server.rooms[payload.roomName] ?: return@standardWebSocket
                    if (room.currentPhase == Room.Phase.GAME_RUNNING) {
@@ -184,6 +202,8 @@ fun Route.standardWebSocket(
                     val type = when(jsonObject.get("type").asString) {
                         TYPE_CHAT_MESSAGE -> ChatMessage::class.java
                         TYPE_DRAW_DATA -> DrawData::class.java
+                        TYPE_ANNOUNCEMENT_DATA -> Announcement::class.java
+                        TYPE_JOIN_ROOM_HANDSHAKE -> JoinRoomHandshake::class.java
                         else -> BaseModel::class.java
                     }
 
