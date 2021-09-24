@@ -66,7 +66,7 @@ class Room(
                 delay(UPDATE_TIME_FREQ)
             }
 
-            currentPhase = when(currentPhase) {
+            currentPhase = when (currentPhase) {
                 WAITING_FOR_START -> NEW_ROUND
                 NEW_ROUND -> GAME_RUNNING
                 GAME_RUNNING -> SHOW_WORD
@@ -139,13 +139,13 @@ class Room(
 
 
     private fun waitingForPlayers() {
-         GlobalScope.launch {
-             val phaseChange = PhaseChange(
-                 WAITING_FOR_PLAYERS,
-                 DELAY_WAITING_FOR_PLAYERS
-             )
-             broadcast(gson.toJson(phaseChange))
-         }
+        GlobalScope.launch {
+            val phaseChange = PhaseChange(
+                WAITING_FOR_PLAYERS,
+                DELAY_WAITING_FOR_PLAYERS
+            )
+            broadcast(gson.toJson(phaseChange))
+        }
     }
 
     private fun waitingForStart() {
@@ -196,22 +196,22 @@ class Room(
     }
 
     private fun showWord() {
-         GlobalScope.launch {
-             if (winningPlayers.isEmpty()) {
-                 drawingPlayer?.let {
-                     it.score -= PENALTY_NOBODY_GUESSED_IT
-                 }
-             }
+        GlobalScope.launch {
+            if (winningPlayers.isEmpty()) {
+                drawingPlayer?.let {
+                    it.score -= PENALTY_NOBODY_GUESSED_IT
+                }
+            }
 
-             word?.let {
-                 val chosenWord = ChosenWord(it, name)
-                 broadcast(gson.toJson(chosenWord))
-             }
+            word?.let {
+                val chosenWord = ChosenWord(it, name)
+                broadcast(gson.toJson(chosenWord))
+            }
 
-             waitAndNotify(DELAY_SHOW_WORD_TO_NEW_ROUND)
-             val phaseChange = PhaseChange(Phase.SHOW_WORD, DELAY_SHOW_WORD_TO_NEW_ROUND)
-             broadcast(gson.toJson(phaseChange))
-         }
+            waitAndNotify(DELAY_SHOW_WORD_TO_NEW_ROUND)
+            val phaseChange = PhaseChange(Phase.SHOW_WORD, DELAY_SHOW_WORD_TO_NEW_ROUND)
+            broadcast(gson.toJson(phaseChange))
+        }
     }
 
     private fun addWinningPlayer(username: String): Boolean {
@@ -220,7 +220,7 @@ class Room(
         if (winningPlayers.size == players.size - 1) {
             currentPhase = NEW_ROUND
             return true
-        }else {
+        } else {
             return false
         }
     }
@@ -264,22 +264,49 @@ class Room(
         return false
     }
 
-    private fun nextDrawingPlayer() {
-         drawingPlayer?.isDrawing = false
-         if (players.isEmpty()) return
+    private suspend fun sendWordToPlayer(player: Player) {
+        val delay = when (currentPhase) {
+            WAITING_FOR_PLAYERS -> 0L
+            WAITING_FOR_START -> DELAY_WAITING_FOR_START_TO_NEW_ROUND
+            NEW_ROUND -> DELAY_NEW_ROUND_TO_GAME_RUNNING
+            GAME_RUNNING -> DELAY_GAME_RUNNING_TO_SHOW_WORD
+            SHOW_WORD -> DELAY_SHOW_WORD_TO_NEW_ROUND
+        }
 
-         drawingPlayer = if (drawingPlayerIndex <= players.size - 1) {
-             players[drawingPlayerIndex]
-         }else {
-             players.last()
-         }
+        val phaseChange = PhaseChange(currentPhase, delay, drawingPlayer?.username)
+        word?.let { curWord ->
+            drawingPlayer?.let { drawingPlayer ->
+                val gameState = GameState(
+                    drawingPlayer.username,
+                    if (player.isDrawing || currentPhase == Phase.SHOW_WORD) {
+                        curWord
+                    } else {
+                        curWord.transforToUnderscores()
+                    }
+                )
+                player.socket.send(Frame.Text(gson.toJson(gameState)))
+            }
+        }
+
+        player.socket.send(Frame.Text(gson.toJson(phaseChange)))
+
+    }
+
+    private fun nextDrawingPlayer() {
+        drawingPlayer?.isDrawing = false
+        if (players.isEmpty()) return
+
+        drawingPlayer = if (drawingPlayerIndex <= players.size - 1) {
+            players[drawingPlayerIndex]
+        } else {
+            players.last()
+        }
 
         if (drawingPlayerIndex < players.size - 1) {
             drawingPlayerIndex++
-        }else {
+        } else {
             drawingPlayerIndex = 0
         }
-
 
 
     }
