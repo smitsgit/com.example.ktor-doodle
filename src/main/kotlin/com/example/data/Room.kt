@@ -2,6 +2,7 @@ package com.example.data
 
 import com.example.data.Room.Phase.*
 import com.example.data.models.Announcement
+import com.example.data.models.ChosenWord
 import com.example.data.models.PhaseChange
 import com.example.gson
 import io.ktor.http.cio.websocket.*
@@ -14,6 +15,8 @@ class Room(
 ) {
     private var timerJob: Job? = null
     private var drawingPlayer: Player? = null
+    private var winningPlayers = listOf<String>()
+    private var word: String? = null
 
     private var phaseChangedListener: ((Phase) -> Unit)? = null
     var currentPhase = WAITING_FOR_PLAYERS
@@ -110,6 +113,11 @@ class Room(
         return player
     }
 
+    fun setWordAndSwitchToGameRunning(word: String) {
+        this.word = word
+        currentPhase = Phase.GAME_RUNNING
+    }
+
     fun containsPlayer(username: String): Boolean {
         return players.find {
             it.username == username
@@ -147,7 +155,22 @@ class Room(
     }
 
     private fun showWord() {
+         GlobalScope.launch {
+             if (winningPlayers.isEmpty()) {
+                 drawingPlayer?.let {
+                     it.score -= PENALTY_NOBODY_GUESSED_IT
+                 }
+             }
 
+             word?.let {
+                 val chosenWord = ChosenWord(it, name)
+                 broadcast(gson.toJson(chosenWord))
+             }
+
+             waitAndNotify(DELAY_SHOW_WORD_TO_NEW_ROUND)
+             val phaseChange = PhaseChange(Phase.SHOW_WORD, DELAY_SHOW_WORD_TO_NEW_ROUND)
+             broadcast(gson.toJson(phaseChange))
+         }
     }
 
     enum class Phase {
@@ -165,5 +188,7 @@ class Room(
         const val DELAY_GAME_RUNNING_TO_SHOW_WORD = 60000L
         const val DELAY_SHOW_WORD_TO_NEW_ROUND = 10000L
         const val DELAY_WAITING_FOR_PLAYERS = 10000L
+
+        const val PENALTY_NOBODY_GUESSED_IT = 50
     }
 }
