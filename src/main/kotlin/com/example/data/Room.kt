@@ -3,8 +3,11 @@ package com.example.data
 import com.example.data.Room.Phase.*
 import com.example.data.models.Announcement
 import com.example.data.models.ChosenWord
+import com.example.data.models.GameState
 import com.example.data.models.PhaseChange
 import com.example.gson
+import com.example.other.transforToUnderscores
+import com.example.other.words
 import io.ktor.http.cio.websocket.*
 import kotlinx.coroutines.*
 
@@ -17,6 +20,7 @@ class Room(
     private var drawingPlayer: Player? = null
     private var winningPlayers = listOf<String>()
     private var word: String? = null
+    private var curWords: List<String>? = null
 
     private var phaseChangedListener: ((Phase) -> Unit)? = null
     var currentPhase = WAITING_FOR_PLAYERS
@@ -151,7 +155,28 @@ class Room(
     }
 
     private fun gameRunning() {
+        winningPlayers = listOf()
+        val wordToSend = word ?: curWords?.random() ?: words.random()
+        val wordWithUnderScores = wordToSend.transforToUnderscores()
+        val drawingUserName = (drawingPlayer ?: players.random()).username
 
+        val gameStateForDrawingPlayer = GameState(
+            drawingUserName, wordToSend
+        )
+
+        val gameStateForGuessingPlayers = GameState(
+            drawingUserName, wordWithUnderScores
+        )
+
+        GlobalScope.launch {
+            broadcastExceptTo(
+                drawingPlayer?.clientId ?: players.random().clientId,
+                gson.toJson(gameStateForGuessingPlayers)
+            )
+
+            drawingPlayer?.socket?.send(Frame.Text(gson.toJson(gameStateForDrawingPlayer)))
+            println("Drawing phase in room $name started. It will last for ${DELAY_GAME_RUNNING_TO_SHOW_WORD / 1000}s")
+        }
     }
 
     private fun showWord() {

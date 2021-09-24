@@ -9,6 +9,7 @@ import com.example.other.Constants.TYPE_ANNOUNCEMENT_DATA
 import com.example.other.Constants.TYPE_CHAT_MESSAGE
 import com.example.other.Constants.TYPE_CHOSEN_WORD
 import com.example.other.Constants.TYPE_DRAW_DATA
+import com.example.other.Constants.TYPE_GAME_STATE
 import com.example.other.Constants.TYPE_JOIN_ROOM_HANDSHAKE
 import com.example.other.Constants.TYPE_PHASE_CHANGE
 import com.example.server
@@ -213,6 +214,7 @@ fun Route.standardWebSocket(
                         TYPE_JOIN_ROOM_HANDSHAKE -> JoinRoomHandshake::class.java
                         TYPE_PHASE_CHANGE -> PhaseChange::class.java
                         TYPE_CHOSEN_WORD -> ChosenWord::class.java
+                        TYPE_GAME_STATE -> GameState::class.java
                         else -> BaseModel::class.java
                     }
 
