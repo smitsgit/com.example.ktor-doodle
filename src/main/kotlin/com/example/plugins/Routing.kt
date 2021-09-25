@@ -8,13 +8,14 @@ import com.example.other.Constants.MAX_ROOM_SIZE
 import com.example.other.Constants.TYPE_ANNOUNCEMENT_DATA
 import com.example.other.Constants.TYPE_CHAT_MESSAGE
 import com.example.other.Constants.TYPE_CHOSEN_WORD
+import com.example.other.Constants.TYPE_DISCONNECT_REQUEST
+import com.example.other.Constants.TYPE_DRAW_ACTION
 import com.example.other.Constants.TYPE_DRAW_DATA
 import com.example.other.Constants.TYPE_GAME_STATE
 import com.example.other.Constants.TYPE_JOIN_ROOM_HANDSHAKE
 import com.example.other.Constants.TYPE_PHASE_CHANGE
 import com.example.other.Constants.TYPE_PING
 import com.example.server
-import com.google.gson.Gson
 import com.google.gson.JsonParser
 import io.ktor.routing.*
 import io.ktor.http.*
@@ -169,13 +170,22 @@ fun Route.getWebSocketRoute() {
                        playerInRoom?.startPings()
 
                    }
-1
+
                }
                is DrawData -> {
                    val room = server.rooms[payload.roomName] ?: return@standardWebSocket
                    if (room.currentPhase == Room.Phase.GAME_RUNNING) {
                        room.broadcastExceptTo(clientId, message)
+                       room.addSerializedDrawInfo(message)
                    }
+                   room.lastDrawData = payload
+               }
+
+               is DrawAction -> {
+                   val room = server.getRoomWithClientId(clientId) ?: return@standardWebSocket
+                   room.broadcastExceptTo(clientId, message)
+                   room.addSerializedDrawInfo(message)
+
                }
 
                is ChosenWord -> {
@@ -192,6 +202,12 @@ fun Route.getWebSocketRoute() {
               is Ping -> {
                   server.players[clientId]?.receivedPong()
               }
+
+              is DisconnectRequest -> {
+                  server.playerLeft(clientId, true)
+              }
+
+
             }
         }
 
@@ -229,6 +245,8 @@ fun Route.standardWebSocket(
                         TYPE_CHOSEN_WORD -> ChosenWord::class.java
                         TYPE_GAME_STATE -> GameState::class.java
                         TYPE_PING -> Ping::class.java
+                        TYPE_DISCONNECT_REQUEST -> DisconnectRequest::class.java
+                        TYPE_DRAW_ACTION -> DrawAction::class.java
                         else -> BaseModel::class.java
                     }
 

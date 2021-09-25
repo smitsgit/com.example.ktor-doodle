@@ -28,6 +28,9 @@ class Room(
     private val playerRemoveJobs = ConcurrentHashMap<String, Job>()
     private val leftPlayers = ConcurrentHashMap<String, Pair<Player, Int>>()
 
+    private var curRoundDrawData: List<String> = listOf()
+    var lastDrawData: DrawData? = null
+
 
     private var phaseChangedListener: ((Phase) -> Unit)? = null
     var currentPhase = WAITING_FOR_PLAYERS
@@ -74,8 +77,14 @@ class Room(
 
             currentPhase = when (currentPhase) {
                 WAITING_FOR_START -> NEW_ROUND
-                NEW_ROUND -> GAME_RUNNING
-                GAME_RUNNING -> SHOW_WORD
+                NEW_ROUND -> {
+                    word = null
+                    GAME_RUNNING
+                }
+                GAME_RUNNING -> {
+                    finishOffDrawing()
+                    SHOW_WORD
+                }
                 SHOW_WORD -> NEW_ROUND
                 else -> WAITING_FOR_PLAYERS
             }
@@ -104,6 +113,25 @@ class Room(
         }.forEach {
             if (it.socket.isActive) {
                 it.socket.send(Frame.Text(message))
+            }
+        }
+    }
+
+    private suspend fun sendCurRoundDrawInfoToPlayer(player: Player) {
+        if (currentPhase in listOf(GAME_RUNNING, SHOW_WORD)) {
+            player.socket.send(Frame.Text(gson.toJson(RoundDrawInfo(curRoundDrawData))))
+        }
+    }
+
+    fun addSerializedDrawInfo(drawAction: String) {
+        curRoundDrawData = curRoundDrawData + drawAction
+    }
+
+    private suspend fun finishOffDrawing() {
+        lastDrawData?.let {
+            if (curRoundDrawData.isNotEmpty() && it.motionEvent == 2) {
+                val finishDrawData = it.copy(motionEvent = 1)
+                broadcast(gson.toJson(finishDrawData))
             }
         }
     }
@@ -151,6 +179,7 @@ class Room(
         )
         sendWordToPlayer(player)
         broadcastPlayerStates()
+        sendCurRoundDrawInfoToPlayer(player)
         broadcast(gson.toJson(announcement))
 
         return player
@@ -225,6 +254,7 @@ class Room(
     }
 
     private fun newRound() {
+        curRoundDrawData = listOf()
         curWords = getRandomWords(3)
         val newWords = NewWords(curWords!!)
         nextDrawingPlayer()
