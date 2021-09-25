@@ -12,6 +12,7 @@ import com.example.other.Constants.TYPE_DRAW_DATA
 import com.example.other.Constants.TYPE_GAME_STATE
 import com.example.other.Constants.TYPE_JOIN_ROOM_HANDSHAKE
 import com.example.other.Constants.TYPE_PHASE_CHANGE
+import com.example.other.Constants.TYPE_PING
 import com.example.server
 import com.google.gson.Gson
 import com.google.gson.JsonParser
@@ -162,6 +163,11 @@ fun Route.getWebSocketRoute() {
 
                    if (!room.containsPlayer(player.username)) {
                        room.addPlayer(player.clientId, player.username, socket)
+                   } else {
+                       val playerInRoom = room.players.find { it.clientId == clientId }
+                       playerInRoom?.socket = socket
+                       playerInRoom?.startPings()
+
                    }
 1
                }
@@ -182,6 +188,10 @@ fun Route.getWebSocketRoute() {
                        room.broadcast(message)
                    }
                }
+
+              is Ping -> {
+                  server.players[clientId]?.receivedPong()
+              }
             }
         }
 
@@ -218,6 +228,7 @@ fun Route.standardWebSocket(
                         TYPE_PHASE_CHANGE -> PhaseChange::class.java
                         TYPE_CHOSEN_WORD -> ChosenWord::class.java
                         TYPE_GAME_STATE -> GameState::class.java
+                        TYPE_PING -> Ping::class.java
                         else -> BaseModel::class.java
                     }
 
