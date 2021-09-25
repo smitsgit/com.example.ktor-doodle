@@ -230,6 +230,13 @@ fun Route.standardWebSocket(
         }
         finally {
             // Handle the disconnects
+            val playerWithClientId = server.getRoomWithClientId(clientId = session.clientId)?.players?.find {
+                it.clientId == session.clientId
+            }
+
+            if (playerWithClientId != null) {
+                server.playerLeft(session.clientId, false)
+            }
         }
 
     }
